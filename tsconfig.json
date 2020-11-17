@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "moduleResolution": "Node",
+    "outDir": "lib"
+  },
+  "include": [
+    "src"
+  ]
+}
