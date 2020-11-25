@@ -1,39 +1,16 @@
-import * as Influx from 'influx'
-import { Encoder } from 'ts-coder'
-import { join } from 'path'
+import * as chalk from 'chalk'
 import * as dayjs from 'dayjs'
-import * as Keyv from 'keyv'
-import { KeyvFile } from 'keyv-file'
+import * as Influx from 'influx'
+import { join } from 'path'
 import * as fs from 'fs'
+import { Decoder, Encoder } from 'ts-coder'
 
 const BASE_PATH = process.cwd()
-
-const keyv = new Keyv<{
-  lastUpdatedAt: number
-}>({
-  store: new KeyvFile({
-    filename: join(BASE_PATH, 'store.json'),
-  }),
-})
 const PUBLIC_PATH = join(BASE_PATH, 'public')
+const tsPaths: string[] = []
 
-if (!fs.existsSync(PUBLIC_PATH)) {
-  fs.mkdirSync(PUBLIC_PATH)
-}
-
-if (
-  !fs.existsSync(join(PUBLIC_PATH, 'main.m3u8')) ||
-  !fs.readFileSync(join(PUBLIC_PATH, 'main.m3u8'))
-) {
-  fs.writeFileSync(
-    join(PUBLIC_PATH, 'main.m3u8'),
-    `
-#EXTM3U
-#EXT-X-TARGETDURATION:1
-#EXT-X-MEDIA-SEQUENCE:0
-`.trim() + '\n\n'
-  )
-}
+fs.rmdirSync(PUBLIC_PATH, { recursive: true })
+fs.mkdirSync(PUBLIC_PATH)
 
 const influx = new Influx.InfluxDB({
   host: 'localhost',
@@ -49,20 +26,20 @@ const influx = new Influx.InfluxDB({
   ],
 })
 
-async function main() {
-  const store = await keyv.get('lastUpdatedAt')
-  const lastUpdatedAt = store?.lastUpdatedAt ?? 0
+let lastUpdatedAt = 0
+let imageIndex = 0
 
+async function update() {
   const query = `select * from jpeg_buffer where time > '${dayjs(
     lastUpdatedAt
   ).format()}'`
-
-  console.log(query)
-
   const data = await influx.query<{ time: Date; buffer: string }>(query)
-  // keyv.set('lastUpdatedAt', { lastUpdatedAt: Date.now() })
 
   const records = data.filter((v) => typeof v.buffer === 'string')
+
+  if (!records.length) {
+    return
+  }
 
   const encoder = new Encoder({
     pid: 0x30,
@@ -78,21 +55,48 @@ async function main() {
     },
   })
 
-  records.forEach((record, recordIndex) => {
-    const buffer = Buffer.from(record.buffer)
+  const sequence = tsPaths.length
+  const decoder = new Decoder({
+    headSize: 4,
+    isEnd(head) {
+      return head[0] === 0x02
+    },
+  })
+  decoder.onData((data) => {
+    console.log(`${data.byteLength}bytes decoded`)
+  })
+
+  records.forEach((record) => {
+    const buffer = Buffer.from(record.buffer, 'base64')
+    console.log('source size', buffer.byteLength)
 
     const tsList = encoder.encode(buffer)
 
     tsList.forEach((ts, tsIndex) => {
-      const filename = `${recordIndex}-${tsIndex}.ts`
+      const filename = `${imageIndex}-${tsIndex}.ts`
+      tsPaths.push(filename)
       fs.writeFileSync(join(PUBLIC_PATH, filename), ts)
-
-      fs.appendFileSync(
-        join(PUBLIC_PATH, 'main.m3u8'),
-        `#EXTINF:1, no-desc\n${recordIndex}-${tsIndex}.ts\n`
-      )
+      decoder.push(ts)
     })
+    imageIndex++
   })
+
+  const m3u8Header = [
+    '#EXTM3U',
+    '#EXT-X-TARGETDURATION: 1',
+    '#EXT-X-VERSION: 3',
+    `#EXT-X-MEDIA-SEQUENCE: ${sequence}`,
+  ].join('\n')
+  const m3u8Paths = tsPaths.map((p) => `#EXTINF:1, no-desc\n${p}`).join('\n')
+  fs.writeFileSync(
+    join(PUBLIC_PATH, 'main.m3u8'),
+    m3u8Header + '\n\n' + m3u8Paths
+  )
+
+  lastUpdatedAt = Date.now()
+  console.log(chalk.green(`✅ ${records.length} files updated`))
 }
 
-main()
+console.log(chalk.cyan('🚀 Start database watching'))
+// update()
+setInterval(update, 1000)
