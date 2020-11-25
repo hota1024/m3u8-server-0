@@ -1,35 +1,16 @@
 import * as chalk from 'chalk'
 import * as dayjs from 'dayjs'
-import * as Influx from 'influx'
 import { join } from 'path'
-import * as fs from 'fs'
 import { Decoder, Encoder } from 'ts-coder'
+import { PUBLIC_PATH } from './constants'
+import { fs } from './fs'
+import { influx } from './influx'
 
-const BASE_PATH = process.cwd()
-const PUBLIC_PATH = join(BASE_PATH, 'public')
 const tsPaths: string[] = []
-
-fs.rmdirSync(PUBLIC_PATH, { recursive: true })
-fs.mkdirSync(PUBLIC_PATH)
-
-const influx = new Influx.InfluxDB({
-  host: 'localhost',
-  database: 'jpeg_buffer_db',
-  schema: [
-    {
-      measurement: 'jpeg_buffer',
-      fields: {
-        buffer: Influx.FieldType.STRING,
-      },
-      tags: [],
-    },
-  ],
-})
-
 let lastUpdatedAt = 0
 let imageIndex = 0
 
-async function update() {
+export async function update(): Promise<void> {
   const query = `select * from jpeg_buffer where time > '${dayjs(
     lastUpdatedAt
   ).format()}'`
@@ -96,7 +77,3 @@ async function update() {
   lastUpdatedAt = Date.now()
   console.log(chalk.green(`✅ ${records.length} files updated`))
 }
-
-console.log(chalk.cyan('🚀 Start database watching'))
-// update()
-setInterval(update, 1000)

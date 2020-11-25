@@ -4,8 +4,8 @@
   "main": "lib/index.js",
   "license": "MIT",
   "scripts": {
-    "gen": "ts-node src/gen.ts",
-    "serve": "sar public",
+    "start": "ts-node src/index.ts",
+    "serve": "ts-node src/server",
     "build": "tsc",
     "watch": "tsc --watch"
   },
