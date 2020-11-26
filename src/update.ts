@@ -71,7 +71,7 @@ export async function update(): Promise<void> {
   const m3u8Paths = tsPaths.map((p) => `#EXTINF:1, no-desc\n${p}`).join('\n')
   fs.writeFileSync(
     join(PUBLIC_PATH, 'main.m3u8'),
-    m3u8Header + '\n\n' + m3u8Paths
+    m3u8Header + '\n\n' + m3u8Paths + '\n\n#EXTM3U'
   )
 
   lastUpdatedAt = Date.now()
