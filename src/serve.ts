@@ -1,6 +1,6 @@
 import * as express from 'express'
-import { fs } from 'memfs'
 import { join } from 'path'
+import { fs } from './fs'
 import { PUBLIC_PATH } from './constants'
 
 export function serve(): void {
