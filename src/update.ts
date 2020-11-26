@@ -64,9 +64,9 @@ export async function update(): Promise<void> {
 
   const m3u8Header = [
     '#EXTM3U',
-    '#EXT-X-TARGETDURATION: 1',
-    '#EXT-X-VERSION: 3',
-    `#EXT-X-MEDIA-SEQUENCE: ${sequence}`,
+    '#EXT-X-TARGETDURATION:1',
+    '#EXT-X-VERSION:3',
+    `#EXT-X-MEDIA-SEQUENCE:${sequence}`,
   ].join('\n')
   const m3u8Paths = tsPaths.map((p) => `#EXTINF:1, no-desc\n${p}`).join('\n')
   fs.writeFileSync(
