@@ -1,12 +1,12 @@
 import * as chalk from 'chalk'
 import * as dayjs from 'dayjs'
 import { join } from 'path'
-import { Decoder, Encoder } from 'ts-coder'
-import { PUBLIC_PATH } from './constants'
+import { Encoder } from 'ts-coder'
+import { MAX_M3U8_ITEMS, PUBLIC_PATH } from './constants'
 import { fs } from './fs'
 import { influx } from './influx'
 
-const tsPaths: string[] = []
+const images: string[][] = []
 let lastUpdatedAt = 0
 let imageIndex = 0
 
@@ -20,6 +20,11 @@ export async function update(): Promise<void> {
 
   if (!records.length) {
     return
+  }
+  console.log(`⭐ ${records.length} records found`)
+  lastUpdatedAt = Date.now()
+  for (const r of records) {
+    console.log(r.time.getTime())
   }
 
   const encoder = new Encoder({
@@ -36,31 +41,49 @@ export async function update(): Promise<void> {
     },
   })
 
-  const sequence = tsPaths.length
-  const decoder = new Decoder({
-    headSize: 4,
-    isEnd(head) {
-      return head[0] === 0x02
-    },
-  })
-  decoder.onData((data) => {
-    console.log(`${data.byteLength}bytes decoded`)
-  })
+  let updateFirstIndex = images.length
 
   records.forEach((record) => {
     const buffer = Buffer.from(record.buffer, 'base64')
-    console.log('source size', buffer.byteLength)
 
     const tsList = encoder.encode(buffer)
+    const tsPaths: string[] = []
 
     tsList.forEach((ts, tsIndex) => {
       const filename = `${imageIndex}-${tsIndex}.ts`
-      tsPaths.push(filename)
       fs.writeFileSync(join(PUBLIC_PATH, filename), ts)
-      decoder.push(ts)
+
+      tsPaths.push(filename)
     })
+
+    images.push(tsPaths)
     imageIndex++
   })
+
+  while (images.length > MAX_M3U8_ITEMS) {
+    const paths = images[0]
+
+    console.log(`🔥 ┌ removing ${paths.length}`)
+    for (const path of paths) {
+      fs.unlinkSync(join(PUBLIC_PATH, path))
+      console.log(`   ├ 🔥 removed: ${path}`)
+    }
+
+    updateFirstIndex--
+    images.shift()
+  }
+
+  console.log('♻️ items checked')
+
+  let sequence = 0
+
+  for (let i = 0; i < images.length; ++i) {
+    if (updateFirstIndex === i) {
+      break
+    }
+
+    sequence += images[i].reduce((v) => v + 1, 0)
+  }
 
   const m3u8Header = [
     '#EXTM3U',
@@ -68,12 +91,19 @@ export async function update(): Promise<void> {
     '#EXT-X-VERSION:3',
     `#EXT-X-MEDIA-SEQUENCE:${sequence}`,
   ].join('\n')
-  const m3u8Paths = tsPaths.map((p) => `#EXTINF:1, no-desc\n${p}`).join('\n')
+
+  const m3u8Paths = images
+    .map((img) => img.map((p) => `#EXTINF:1, no-desc\n${p}`).join('\n'))
+    .join('\n')
+
   fs.writeFileSync(
     join(PUBLIC_PATH, 'main.m3u8'),
     m3u8Header + '\n\n' + m3u8Paths + '\n\n#EXTM3U'
   )
 
-  lastUpdatedAt = Date.now()
-  console.log(chalk.green(`✅ ${records.length} files updated`))
+  console.log(
+    chalk.green(
+      `✅ ${records.length} files updated │ total ${images.length} images | seq ${sequence}`
+    )
+  )
 }
