@@ -1,5 +1,4 @@
 import * as chalk from 'chalk'
-import * as dayjs from 'dayjs'
 import { join } from 'path'
 import { Encoder } from 'ts-coder'
 import { MAX_M3U8_ITEMS, PUBLIC_PATH } from './constants'
@@ -11,9 +10,9 @@ let lastUpdatedAt = 0
 let imageIndex = 0
 
 export async function update(): Promise<void> {
-  const query = `select * from jpeg_buffer where time > '${dayjs(
-    lastUpdatedAt
-  ).format()}'`
+  const query = `select * from jpeg_buffer where time > ${
+    lastUpdatedAt * 1000000
+  } LIMIT 1`
   const data = await influx.query<{ time: Date; buffer: string }>(query)
 
   const records = data.filter((v) => typeof v.buffer === 'string')
@@ -21,11 +20,9 @@ export async function update(): Promise<void> {
   if (!records.length) {
     return
   }
+
   console.log(`⭐ ${records.length} records found`)
-  lastUpdatedAt = Date.now()
-  for (const r of records) {
-    console.log(r.time.getTime())
-  }
+  lastUpdatedAt = records[0].time.getTime() + 1
 
   const encoder = new Encoder({
     pid: 0x30,
@@ -60,13 +57,16 @@ export async function update(): Promise<void> {
     imageIndex++
   })
 
+  console.log(images.length)
   while (images.length > MAX_M3U8_ITEMS) {
     const paths = images[0]
 
     console.log(`🔥 ┌ removing ${paths.length}`)
     for (const path of paths) {
-      fs.unlinkSync(join(PUBLIC_PATH, path))
       console.log(`   ├ 🔥 removed: ${path}`)
+      setTimeout(() => {
+        fs.unlinkSync(join(PUBLIC_PATH, path))
+      }, 1000)
     }
 
     updateFirstIndex--

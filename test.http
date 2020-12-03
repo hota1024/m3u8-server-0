@@ -1,0 +1,5 @@
+GET http://localhost:3000/main.m3u8
+
+###
+
+GET http://localhost:3000/7-1.ts 
